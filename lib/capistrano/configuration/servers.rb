@@ -26,6 +26,9 @@ module Capistrano
       # Yet additionally, if the HOSTFILTER environment variable is set, it
       # will limit the result to hosts found in that (comma-separated) list.
       #
+      # If the HOSTROLEFILTER environment variable is set, it will limit the
+      # result to hosts found in that (comma-separated) list of roles 
+      #
       # Usage:
       #
       #   # return all known servers
@@ -39,6 +42,9 @@ module Capistrano
       #   # returns the given hosts, translated to ServerDefinition objects
       #   servers = find_servers :hosts => "jamis@example.host.com"
       def find_servers(options={})
+        return [] if options.key?(:hosts) && (options[:hosts].nil? || options[:hosts] == [])
+        return [] if options.key?(:roles) && (options[:roles].nil? || options[:roles] == [])
+        
         hosts  = server_list_from(ENV['HOSTS'] || options[:hosts])
         
         if hosts.any?
@@ -69,9 +75,21 @@ module Capistrano
     protected
 
       def filter_server_list(servers)
-        return servers unless ENV['HOSTFILTER']
-        filters = ENV['HOSTFILTER'].split(/,/)
-        servers.select { |server| filters.include?(server.host) }
+        return servers unless ENV['HOSTFILTER'] or ENV['HOSTROLEFILTER']
+        if ENV['HOSTFILTER']
+          filters = ENV['HOSTFILTER'].split(/,/)
+          servers.select { |server| filters.include?(server.host) }
+        elsif ENV['HOSTROLEFILTER']
+          filters = ENV['HOSTROLEFILTER'].split(/,/).map do |role|
+            local_roles = roles[role.to_sym]
+            if local_roles.is_a? Array
+              roles[role.to_sym]
+            else
+              roles[role.to_sym].servers
+            end
+          end.flatten
+          servers.select { |server| filters.include?(server) }
+        end
       end
 
       def server_list_from(hosts)
